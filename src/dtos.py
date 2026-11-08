@@ -51,6 +51,7 @@ class V1RequestBase(object):
     disableMedia: bool = None
     # Optional when you've got a turnstile captcha that needs to be clicked after X number of Tab presses
     tabs_till_verify : int = None
+    embeddedTurnstile: dict | None = None
 
     def __init__(self, _dict):
         self.__dict__.update(_dict)

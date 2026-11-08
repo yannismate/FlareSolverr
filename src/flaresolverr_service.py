@@ -16,6 +16,7 @@ from selenium.webdriver.support.expected_conditions import (
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.wait import WebDriverWait
 
+import embedded_turnstile
 import utils
 from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
                   ChallengeResolutionT, HealthResponse, IndexResponse,
@@ -339,6 +340,12 @@ def _resolve_turnstile_captcha(req: V1RequestBase, driver: WebDriver):
     return turnstile_token
 
 def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> ChallengeResolutionT:
+    if req.embeddedTurnstile is not None:
+        return embedded_turnstile.resolve(req, driver, method, _resolve_page)
+    return _resolve_page(req, driver, method)
+
+
+def _resolve_page(req: V1RequestBase, driver: WebDriver, method: str) -> ChallengeResolutionT:
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
     res.message = ""
