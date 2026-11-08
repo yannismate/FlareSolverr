@@ -72,20 +72,24 @@ def _click_widget(driver):
 def _recover(driver, options, deadline):
     clicked = False
     next_probe = 0
+    next_click = 0
 
     def ready(browser):
-        nonlocal clicked, next_probe
+        nonlocal clicked, next_probe, next_click
         now = time.monotonic()
-        if now >= next_probe:
-            next_probe = now + 2
-            if _probe(browser, options["probeUrl"]):
-                return True
         try:
+            inputs = browser.find_elements(By.CSS_SELECTOR, "input[name='cf-turnstile-response']")
+            pending = bool(inputs) and not inputs[0].get_attribute("value")
+            if now >= next_probe and (not pending or not clicked):
+                next_probe = now + 5
+                if _probe(browser, options["probeUrl"]):
+                    return True
             if options.get("dismissConsent", False) and _dismiss_consent(browser):
                 return False
-            if not clicked and browser.find_elements(By.CSS_SELECTOR, "input[name='cf-turnstile-response']"):
-                clicked = _click_widget(browser)
-                if clicked:
+            if pending and now >= next_click:
+                if _click_widget(browser):
+                    clicked = True
+                    next_click = now + 10
                     logging.info("Embedded Turnstile checkbox activated")
         except WebDriverException:
             pass

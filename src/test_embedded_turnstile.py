@@ -27,6 +27,8 @@ class EmbeddedTurnstileTests(unittest.TestCase):
         self.driver = Mock(spec=WebDriver)
         self.driver.current_url = "https://example.com/profile"
         self.driver.page_source = "recovered page"
+        self.token_input = Mock()
+        self.token_input.get_attribute.return_value = ""
         self.driver.get_cookies.return_value = [{"name": "clearance", "value": "not logged"}]
         self.result = SimpleNamespace(result=SimpleNamespace())
         self.original.return_value = self.result
@@ -75,29 +77,40 @@ class EmbeddedTurnstileTests(unittest.TestCase):
         self.driver.get_screenshot_as_base64.assert_called_once()
 
     def test_delayed_widget_and_removed_input(self):
-        self.driver.find_elements.side_effect = [[], [object()], []]
+        self.driver.find_elements.side_effect = [[], [self.token_input], [], [], []]
         with patch.object(extension, "WebDriverWait", ImmediateWait), \
-                patch.object(extension.time, "monotonic", side_effect=range(20)), \
-                patch.object(extension, "_probe", side_effect=[False, False, True]), \
+                patch.object(extension.time, "monotonic", side_effect=[0, 1, 2, 3, 4, 6]), \
+                patch.object(extension, "_probe", side_effect=[False, True]), \
                 patch.object(extension, "_click_widget", return_value=True) as click:
             extension._recover(self.driver, {"probeUrl": "https://api.example.com/profile"}, 100)
         click.assert_called_once_with(self.driver)
 
     def test_unresolved_challenge_times_out(self):
-        self.driver.find_elements.return_value = [object()]
+        self.driver.find_elements.return_value = [self.token_input]
         with patch.object(extension, "WebDriverWait", ImmediateWait), \
                 patch.object(extension.time, "monotonic", side_effect=range(20)), \
-                patch.object(extension, "_probe", return_value=False), \
+                patch.object(extension, "_probe", return_value=False) as probe, \
                 patch.object(extension, "_click_widget", return_value=True) as click:
             with self.assertRaises(TimeoutException):
                 extension._recover(self.driver, {"probeUrl": "https://api.example.com/profile"}, 100)
         click.assert_called_once()
+        probe.assert_called_once()
+
+    def test_incomplete_checkbox_is_retried_without_api_polling(self):
+        self.driver.find_elements.side_effect = [[self.token_input]] * 4 + [[]]
+        with patch.object(extension, "WebDriverWait", ImmediateWait), \
+                patch.object(extension.time, "monotonic", side_effect=[0, 1, 6, 11, 16, 21]), \
+                patch.object(extension, "_probe", side_effect=[False, True]) as probe, \
+                patch.object(extension, "_click_widget", return_value=True) as click:
+            self.assertTrue(extension._recover(self.driver, {"probeUrl": "https://api.example.com/profile"}, 100))
+        self.assertEqual(click.call_count, 2)
+        self.assertEqual(probe.call_count, 2)
 
     def test_consent_is_dismissed_before_clicking_widget(self):
-        self.driver.find_elements.return_value = [object()]
+        self.driver.find_elements.side_effect = [[self.token_input]] * 3 + [[], []]
         with patch.object(extension, "WebDriverWait", ImmediateWait), \
-                patch.object(extension.time, "monotonic", side_effect=range(20)), \
-                patch.object(extension, "_probe", side_effect=[False, False, True]), \
+                patch.object(extension.time, "monotonic", side_effect=[0, 1, 2, 3, 4, 6]), \
+                patch.object(extension, "_probe", side_effect=[False, True]), \
                 patch.object(extension, "_dismiss_consent", side_effect=[True, True, False, False]) as consent, \
                 patch.object(extension, "_click_widget", return_value=True) as click:
             self.assertTrue(extension._recover(self.driver, {
