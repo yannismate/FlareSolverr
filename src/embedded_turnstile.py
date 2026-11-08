@@ -113,10 +113,14 @@ def resolve(request, driver, method, resolve_page):
         raise ValueError("embeddedTurnstile.probeUrl must be an HTTP URL")
     if request.tabs_till_verify is not None:
         raise ValueError("embeddedTurnstile cannot be combined with tabs_till_verify")
-    deadline = time.monotonic() + int(request.maxTimeout) / 1000
+    started = time.monotonic()
+    deadline = started + int(request.maxTimeout) / 1000
     seed = V1RequestBase({"url": options["probeUrl"], "maxTimeout": request.maxTimeout})
+    logging.info("Embedded Turnstile session=%s stage=api_clearance host=%s", request.session, address.netloc)
     resolve_page(seed, driver, method)
+    logging.info("Embedded Turnstile session=%s stage=application_navigation elapsed=%.1fs", request.session, time.monotonic() - started)
     result = resolve_page(request, driver, method)
+    logging.info("Embedded Turnstile session=%s stage=verification elapsed=%.1fs", request.session, time.monotonic() - started)
     if _recover(driver, options, deadline):
         result.message = "Embedded Turnstile solved!"
     result.result.url = driver.current_url
@@ -124,4 +128,5 @@ def resolve(request, driver, method, resolve_page):
     result.result.cookies = driver.get_cookies()
     if request.returnScreenshot:
         result.result.screenshot = driver.get_screenshot_as_base64()
+    logging.info("Embedded Turnstile session=%s stage=complete elapsed=%.1fs", request.session, time.monotonic() - started)
     return result

@@ -76,6 +76,13 @@ class EmbeddedTurnstileTests(unittest.TestCase):
         self.assertEqual(self.result.result.cookies, self.driver.get_cookies.return_value)
         self.driver.get_screenshot_as_base64.assert_called_once()
 
+    def test_recovery_logs_stages_with_session(self):
+        request = self.request(session="session-id", embeddedTurnstile={"probeUrl": "https://api.example.com/profile"})
+        with patch.object(extension, "_recover", return_value=False), self.assertLogs(level="INFO") as logs:
+            self.resolve(request, self.driver, "GET")
+        for stage in ("api_clearance", "application_navigation", "verification", "complete"):
+            self.assertTrue(any("session=session-id stage=" + stage in entry for entry in logs.output))
+
     def test_delayed_widget_and_removed_input(self):
         self.driver.find_elements.side_effect = [[], [self.token_input], [], [], []]
         with patch.object(extension, "WebDriverWait", ImmediateWait), \
